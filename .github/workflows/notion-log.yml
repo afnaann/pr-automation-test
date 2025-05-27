@@ -1,12 +1,12 @@
-name: “Log release to Notion”
+name: "Log release to Notion"
 
 on:
-  push:
-    branches:
-      - main
+  pull_request:
+    types: [closed]
 
 jobs:
   notion-log:
+    if: ${{ github.event.pull_request.merged }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -21,17 +21,17 @@ jobs:
         run: pip install notion-client
 
       - name: Gather PR info
-        # you can customize how to extract these, e.g. using GitHub CLI or parsing GH context
         run: |
           echo "VERSION=PR #${{ github.event.pull_request.number }}" >> $GITHUB_ENV
-          echo "NOTES='${{ github.event.pull_request.body | head -n1 }}'" >> $GITHUB_ENV
-          echo "REPO='${{ github.event.repository.name }}'" >> $GITHUB_ENV
+          # grab the full body from the GH context, then pipe in shell
+          PR_BODY='${{ github.event.pull_request.body }}'
+          FIRST_LINE=$(echo "$PR_BODY" | head -n1)
+          echo "NOTES='$FIRST_LINE'" >> $GITHUB_ENV
+          echo "REPO='${{ github.repository }}" >> $GITHUB_ENV
           echo "TESTED_ANDROID=false" >> $GITHUB_ENV
           echo "STATUS=Deploying" >> $GITHUB_ENV
-        if: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged }}
 
       - name: Add row to Notion
-        if: ${{ env.VERSION }}
         run: |
           python add_release.py \
             "$VERSION" \
