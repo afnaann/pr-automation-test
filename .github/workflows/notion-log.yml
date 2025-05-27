@@ -1,4 +1,5 @@
-name: "Log release to Notion"
+# .github/workflows/notion-log.yml
+name: Log release to Notion
 
 on:
   pull_request:
@@ -6,39 +7,62 @@ on:
 
 jobs:
   notion-log:
-    if: ${{ github.event.pull_request.merged }}
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+    env:
+      NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+      NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.x"
-
-      - name: Install deps
-        run: pip install notion-client
-
-      - name: Gather PR info
+      - name: Extract PR info
         run: |
           echo "VERSION=PR #${{ github.event.pull_request.number }}" >> $GITHUB_ENV
-          # grab the full body from the GH context, then pipe in shell
-          PR_BODY='${{ github.event.pull_request.body }}'
-          FIRST_LINE=$(echo "$PR_BODY" | head -n1)
-          echo "NOTES='$FIRST_LINE'" >> $GITHUB_ENV
-          echo "REPO='${{ github.repository }}" >> $GITHUB_ENV
+          # First non-empty line of the PR body
+          NOTES="$(printf '%s\n' "${{ github.event.pull_request.body }}" | sed '/^[[:space:]]*$/d' | head -n1)"
+          echo "NOTES=$NOTES" >> $GITHUB_ENV
+          echo "REPO=${{ github.repository }}" >> $GITHUB_ENV
           echo "TESTED_ANDROID=false" >> $GITHUB_ENV
           echo "STATUS=Deploying" >> $GITHUB_ENV
-
-      - name: Add row to Notion
+          
+      - name: Post to Notion via curl
         run: |
-          python merge-task.py \
-            "$VERSION" \
-            "$NOTES" \
-            "$REPO" \
-            "$TESTED_ANDROID" \
-            "$STATUS"
-        env:
-          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
-          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+          curl -sSL \
+            -X POST https://api.notion.com/v1/pages \
+            -H "Authorization: Bearer $NOTION_TOKEN" \
+            -H "Notion-Version: 2022-06-28" \
+            -H "Content-Type: application/json" \
+            -d @- <<EOF
+          {
+            "parent": { "database_id": "$NOTION_DATABASE_ID" },
+            "properties": {
+              "Version": {
+                "title": [
+                  { "text": { "content": "$VERSION" } }
+                ]
+              },
+              "Notes": {
+                "rich_text": [
+                  { "text": { "content": "$NOTES" } }
+                ]
+              },
+              "Date": {
+                "date": {
+                  "start": "${{ github.event.pull_request.merged_at }}"
+                }
+              },
+              "Repo": {
+                "rich_text": [
+                  { "text": { "content": "$REPO" } }
+                ]
+              },
+              "Tested in Android?": {
+                "checkbox": $TESTED_ANDROID
+              },
+              "Status": {
+                "status": {
+                  "name": "$STATUS"
+                }
+              }
+            }
+          }
+          EOF
