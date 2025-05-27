@@ -1,0 +1,44 @@
+name: “Log release to Notion”
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  notion-log:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.x"
+
+      - name: Install deps
+        run: pip install notion-client
+
+      - name: Gather PR info
+        # you can customize how to extract these, e.g. using GitHub CLI or parsing GH context
+        run: |
+          echo "VERSION=PR #${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+          echo "NOTES='${{ github.event.pull_request.body | head -n1 }}'" >> $GITHUB_ENV
+          echo "REPO='${{ github.event.repository.name }}'" >> $GITHUB_ENV
+          echo "TESTED_ANDROID=false" >> $GITHUB_ENV
+          echo "STATUS=Deploying" >> $GITHUB_ENV
+        if: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged }}
+
+      - name: Add row to Notion
+        if: ${{ env.VERSION }}
+        run: |
+          python add_release.py \
+            "$VERSION" \
+            "$NOTES" \
+            "$REPO" \
+            "$TESTED_ANDROID" \
+            "$STATUS"
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
