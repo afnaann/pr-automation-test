@@ -94,7 +94,7 @@ jobs:
                   { "text": { "content": "PR #$PR_NUMBER" } }
                 ]
               },
-              "Summary": {
+              "Notes": {
                 "rich_text": [
                   { "text": { "content": "$SUMMARY" } }
                 ]
