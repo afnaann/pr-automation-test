@@ -1,8 +1,7 @@
-# .github/workflows/notion-log.yml
 name: Log release to Notion
 
 env:
-  OPENAI_ENABLED: true
+  OPENAI_ENABLED: false
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
 on:
