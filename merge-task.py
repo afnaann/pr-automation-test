@@ -2,8 +2,7 @@
 import os
 from datetime import date
 from notion_client import Client
-from dotenv import load_dotenv
-load_dotenv()
+
 
 
 NOTION_TOKEN = os.environ["NOTION_TOKEN"]
