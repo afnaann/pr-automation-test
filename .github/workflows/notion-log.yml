@@ -1,5 +1,8 @@
-# .github/workflows/notion-log.yml
 name: Log release to Notion
+
+env:
+  OPENAI_ENABLED: false           # enable when getting the openapi key --
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
 on:
   pull_request:
@@ -7,23 +10,74 @@ on:
 
 jobs:
   notion-log:
-    if: github.event.pull_request.merged == true
+    if: |
+      github.event.pull_request.merged == true &&
+      (
+        github.event.pull_request.base.ref == 'main' ||
+        github.event.pull_request.base.ref == 'prod_new'
+      )
     runs-on: ubuntu-latest
     env:
       NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
       NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
 
     steps:
-      - name: Extract PR info
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Prepare variables & functions
         run: |
-          echo "VERSION=PR #${{ github.event.pull_request.number }}" >> $GITHUB_ENV
-          # First non-empty line of the PR body
-          NOTES="$(printf '%s\n' "${{ github.event.pull_request.body }}" | sed '/^[[:space:]]*$/d' | head -n1)"
-          echo "NOTES=$NOTES" >> $GITHUB_ENV
-          echo "REPO=${{ github.repository }}" >> $GITHUB_ENV
-          echo "TESTED_ANDROID=false" >> $GITHUB_ENV
-          echo "STATUS=Deploying" >> $GITHUB_ENV
-          
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          # function: format date consistently as YYYY-MM-DD
+          format_date() {
+            date -d "$1" '+%Y-%m-%d'
+          }
+
+          # function: extract commit messages
+          get_commit_messages() {
+            git --no-pager log --format='%s' $1...$2
+          }
+
+          # function: generate summary via OpenAI
+          generate_summary() {
+            local messages="$1"
+            curl -s https://api.openai.com/v1/chat/completions \
+              -H "Authorization: Bearer $OPENAI_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d '{
+                "model": "gpt-4o-mini",
+                "messages": [
+                  { "role": "system", "content": "You are a helpful assistant." },
+                  { "role": "user", "content": "Summarize the following commit messages in 40-50 words, point wise:\n\n'"$messages"'\n" }
+                ]
+              }' | jq -r '.choices[0].message.content'
+          }
+
+          echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+          echo "PR_URL=${{ github.event.pull_request.html_url }}" >> $GITHUB_ENV
+          echo "BASE_BRANCH=${{ github.event.pull_request.base.ref }}" >> $GITHUB_ENV
+          MERGED_AT_RAW="${{ github.event.pull_request.merged_at }}"
+          echo "MERGED_AT=$(format_date \"$MERGED_AT_RAW\")" >> $GITHUB_ENV
+
+          # commit range for this PR
+          echo "COMMIT_RANGE=$(git merge-base origin/${BASE_BRANCH} HEAD)..HEAD" >> $GITHUB_ENV
+
+          if [ "$OPENAI_ENABLED" = "true" ]; then
+            MESSAGES=$(get_commit_messages "origin/${BASE_BRANCH}" HEAD)
+            echo "SUMMARY=$(generate_summary "$MESSAGES")" >> $GITHUB_ENV
+          else
+            echo "SUMMARY=" >> $GITHUB_ENV
+          fi
+
+          # set status flag
+          if [ "$BASE_BRANCH" = "main" ]; then
+            echo "ENVIRONMENT=Staging" >> $GITHUB_ENV
+          else
+            echo "ENVIRONMENT=Production" >> $GITHUB_ENV
+          fi
+
       - name: Post to Notion via curl
         run: |
           curl -sSL \
@@ -37,31 +91,22 @@ jobs:
             "properties": {
               "Version": {
                 "title": [
-                  { "text": { "content": "$VERSION" } }
+                  { "text": { "content": "PR #$PR_NUMBER" } }
                 ]
               },
               "Notes": {
                 "rich_text": [
-                  { "text": { "content": "$NOTES" } }
+                  { "text": { "content": "$SUMMARY" } }
                 ]
+              },
+              "PR Link": {
+                "url": "$PR_URL"
               },
               "Date": {
-                "date": {
-                  "start": "${{ github.event.pull_request.merged_at }}"
-                }
+                "date": { "start": "$MERGED_AT" }
               },
-              "Repo": {
-                "rich_text": [
-                  { "text": { "content": "$REPO" } }
-                ]
-              },
-              "Tested in Android?": {
-                "checkbox": $TESTED_ANDROID
-              },
-              "Status": {
-                "status": {
-                  "name": "$STATUS"
-                }
+              "Environment": {
+                "select": { "name": "$ENVIRONMENT" }
               }
             }
           }
