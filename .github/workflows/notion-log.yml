@@ -1,7 +1,8 @@
+# .github/workflows/notion-log.yml
 name: Log release to Notion
 
 env:
-  OPENAI_ENABLED: false           # enable when getting the openapi key --
+  OPENAI_ENABLED: false
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
 on:
@@ -26,52 +27,50 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Prepare variables & functions
+        # Bring these in as real shell env vars, not in-file echoes
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_URL:    ${{ github.event.pull_request.html_url }}
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+          MERGED_AT_RAW: ${{ github.event.pull_request.merged_at }}
+          OPENAI_ENABLED: ${{ env.OPENAI_ENABLED }}
+          OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
         run: |
-          #!/usr/bin/env bash
           set -euo pipefail
 
-          # function: format date consistently as YYYY-MM-DD
-          format_date() {
-            date -d "$1" '+%Y-%m-%d'
-          }
+          # strip any surrounding quotes (if present) and format date
+          CLEAN_DATE=${MERGED_AT_RAW%\"}
+          CLEAN_DATE=${CLEAN_DATE#\"}
+          FORMATTED_DATE=$(date -d "$CLEAN_DATE" '+%Y-%m-%d')
+          echo "MERGED_AT=$FORMATTED_DATE" >> $GITHUB_ENV
 
-          # function: extract commit messages
-          get_commit_messages() {
-            git --no-pager log --format='%s' $1...$2
-          }
+          # echo the ones we brought in
+          echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
+          echo "PR_URL=$PR_URL" >> $GITHUB_ENV
+          echo "BASE_BRANCH=$BASE_BRANCH" >> $GITHUB_ENV
 
-          # function: generate summary via OpenAI
-          generate_summary() {
-            local messages="$1"
-            curl -s https://api.openai.com/v1/chat/completions \
+          # commit-range helper
+          echo "COMMIT_RANGE=$(git merge-base origin/${BASE_BRANCH} HEAD)..HEAD" >> $GITHUB_ENV
+
+          # OpenAI summary (optional)
+          if [ "$OPENAI_ENABLED" = "true" ]; then
+            MESSAGES=$(git --no-pager log --format='%s' origin/${BASE_BRANCH}...HEAD)
+            SUMMARY=$(curl -s https://api.openai.com/v1/chat/completions \
               -H "Authorization: Bearer $OPENAI_API_KEY" \
               -H "Content-Type: application/json" \
               -d '{
                 "model": "gpt-4o-mini",
                 "messages": [
                   { "role": "system", "content": "You are a helpful assistant." },
-                  { "role": "user", "content": "Summarize the following commit messages in 40-50 words, point wise:\n\n'"$messages"'\n" }
+                  { "role": "user", "content": "Summarize the following commit messages in 40-50 words, point wise:\n\n'"$MESSAGES"'\n" }
                 ]
-              }' | jq -r '.choices[0].message.content'
-          }
-
-          echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
-          echo "PR_URL=${{ github.event.pull_request.html_url }}" >> $GITHUB_ENV
-          echo "BASE_BRANCH=${{ github.event.pull_request.base.ref }}" >> $GITHUB_ENV
-          MERGED_AT_RAW="${{ github.event.pull_request.merged_at }}"
-          echo "MERGED_AT=$(format_date \"$MERGED_AT_RAW\")" >> $GITHUB_ENV
-
-          # commit range for this PR
-          echo "COMMIT_RANGE=$(git merge-base origin/${BASE_BRANCH} HEAD)..HEAD" >> $GITHUB_ENV
-
-          if [ "$OPENAI_ENABLED" = "true" ]; then
-            MESSAGES=$(get_commit_messages "origin/${BASE_BRANCH}" HEAD)
-            echo "SUMMARY=$(generate_summary "$MESSAGES")" >> $GITHUB_ENV
+              }' | jq -r '.choices[0].message.content')
+            echo "SUMMARY=$SUMMARY" >> $GITHUB_ENV
           else
             echo "SUMMARY=" >> $GITHUB_ENV
           fi
 
-          # set status flag
+          # set environment name
           if [ "$BASE_BRANCH" = "main" ]; then
             echo "ENVIRONMENT=Staging" >> $GITHUB_ENV
           else
