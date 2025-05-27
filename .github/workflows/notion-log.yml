@@ -33,7 +33,7 @@ jobs:
 
       - name: Add row to Notion
         run: |
-          python add_release.py \
+          python merge-task.py \
             "$VERSION" \
             "$NOTES" \
             "$REPO" \
