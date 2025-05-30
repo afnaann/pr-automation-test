@@ -49,7 +49,7 @@ jobs:
           if [ "$BASE_BRANCH" = "main" ]; then
             echo "STATUS=Deploying to Staging"       >> $GITHUB_ENV
           else
-            echo "STATUS=Deploying to Production"    >> $GITHUB_ENV
+            echo "STATUS=Tested in Production"    >> $GITHUB_ENV
           fi
 
       - name: Notion - Create Staging Entry
@@ -83,9 +83,9 @@ jobs:
                 "date": { "start": "$MERGED_AT" }
               },
               "Repo": {
-                "rich_text": [
-                  { "text": { "content": "$REPO" } }
-                ]
+                "select": {
+                  "name": "$REPO"
+                }
               },
               "Tested in Android?": {
                 "checkbox": $TESTED_ANDROID
