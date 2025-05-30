@@ -34,7 +34,7 @@ jobs:
           # format merge date
           CLEAN_DATE=${MERGED_AT_RAW%\"}
           CLEAN_DATE=${CLEAN_DATE#\"}
-          FORMATTED_DATE=$(date -d "$CLEAN_DATE" '+%Y-%m-%d')
+          FORMATTED_DATE=$(date -d "$CLEAN_DATE" '%Y-%m-%d')
           echo "MERGED_AT=$FORMATTED_DATE" >> $GITHUB_ENV
 
           # static fields
@@ -106,26 +106,28 @@ jobs:
       - name: Notion - Update Production Entry
         if: github.event.pull_request.base.ref == 'prod_new'
         run: |
-          PAGE_ID=$(curl -sSL "https://api.notion.com/v1/databases/$NOTION_DATABASE_ID/query" \
+          RESP=$(curl -sSL "https://api.notion.com/v1/databases/$NOTION_DATABASE_ID/query" \
             -H "Authorization: Bearer $NOTION_TOKEN" \
             -H "Notion-Version: 2022-06-28" \
             -H "Content-Type: application/json" \
-            -d '{
-              "filter": {
-                "property": "Version",
-                "title": {
-                  "contains": "PR #'"$PR_NUMBER"'"
-                }
-              }
-            }' | jq -r '.results[0].id')
+            -d '{ "page_size": 100 }')
 
-          if [[ -z "$PAGE_ID" || "$PAGE_ID" == "null" ]]; then
-            echo "⚠️  No Notion page found for PR #$PR_NUMBER — skipping status update."
-            exit 0
+          # pick the page whose Version.title.plain_text == "PR #<number>"
+          PAGE_ID=$(echo "$RESP" | jq -r \
+            --arg PR "PR #$PR_NUMBER" \
+            '.results[]
+             | select(
+                 .properties.Version.title[]
+                 | select(.plain_text == $PR)
+               )
+             | .id')
+
+          if [[ -z "$PAGE_ID" ]]; then
+            echo "❌ No Notion page found for PR #$PR_NUMBER!"
+            exit 1
           fi
 
-
-          # patch only the Status field (and Date if you want it refreshed)
+          # update Status (and Date if desired)
           curl -sSL -X PATCH "https://api.notion.com/v1/pages/$PAGE_ID" \
             -H "Authorization: Bearer $NOTION_TOKEN" \
             -H "Notion-Version: 2022-06-28" \
@@ -136,7 +138,7 @@ jobs:
                   "status": { "name": "'"$STATUS"'" }
                 },
                 "Date": {
-                  "date": { "start": "'"$MERGED_AT"'" }
+                  "date":   { "start": "'"$MERGED_AT"'" }
                 }
               }
             }'
