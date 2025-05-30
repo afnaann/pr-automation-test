@@ -83,9 +83,9 @@ jobs:
                 "date": { "start": "$MERGED_AT" }
               },
               "Repo": {
-                "rich_text": [
-                  { "text": { "content": "$REPO" } }
-                ]
+                "select": {
+                  "name": "$REPO"
+                }
               },
               "Tested in Android?": {
                 "checkbox": $TESTED_ANDROID
