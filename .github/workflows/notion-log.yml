@@ -103,7 +103,7 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Notion: Update Production Entry
+      - name: Notion - Update Production Entry
         if: github.event.pull_request.base.ref == 'prod_new'
         run: |
           # query the database for the page with matching Version
