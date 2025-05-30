@@ -52,7 +52,7 @@ jobs:
             echo "STATUS=Deploying to Production"    >> $GITHUB_ENV
           fi
 
-      - name: Notion: Create Staging Entry
+      - name: Notion - Create Staging Entry
         if: github.event.pull_request.base.ref == 'main'
         run: |
           curl -sSL \
