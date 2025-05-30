@@ -49,7 +49,7 @@ jobs:
           if [ "$BASE_BRANCH" = "main" ]; then
             echo "STATUS=Deploying to Staging"       >> $GITHUB_ENV
           else
-            echo "STATUS=Deploying to Production"    >> $GITHUB_ENV
+            echo "STATUS=Tested in Production"    >> $GITHUB_ENV
           fi
 
       - name: Notion - Create Staging Entry
