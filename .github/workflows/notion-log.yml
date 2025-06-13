@@ -132,7 +132,7 @@ jobs:
             -d '{
               "properties": {
                 "Status": {
-                  "status": { "name": "'"$STATUS"'" }
+                  "select": { "name": "'"$STATUS"'" }
                 }
               }
             }'
