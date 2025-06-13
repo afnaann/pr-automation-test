@@ -82,7 +82,7 @@ jobs:
                 "checkbox": $TESTED_ANDROID
               },
               "Status": {
-                "status":{ "name":"$STATUS" }
+                "select":{ "name":"$STATUS" }
               },
               "Commit Hash": {
                 "rich_text":[{ "text":{ "content":"$COMMIT_HASH" }}]
